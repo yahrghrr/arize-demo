@@ -1,5 +1,7 @@
 # Arize Phoenix Demo
 
+Author: **Sam JD**
+
 > Intended for demos and testing, not for production use.
 
 > **New to AI observability?** Read the [Phoenix tutorial for Dynatrace users](docs/TUTORIAL.md): what every part of
@@ -365,3 +367,7 @@ self-hosting section of the [Phoenix docs](https://arize.com/docs/phoenix).
   every trace would start with a generic HTTP span instead of the chat/rag/agent span.
 - To send the same traces to another OpenTelemetry backend as well (Dynatrace, for example), add a second span processor
   with an OTLP exporter to the tracer provider in `telemetry.py`.
+
+## Author
+
+Created and maintained by **Sam JD**.
