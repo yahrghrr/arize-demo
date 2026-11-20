@@ -88,46 +88,196 @@ Trace data is kept in the `phoenix-data` volume. `docker compose down -v` remove
 
 ## Option B: Install on a VM (systemd)
 
-Requires Ubuntu 22.04+/Debian 12+ or RHEL/Rocky/Alma 9+/Amazon Linux 2023. The script installs Python 3.11+ if
-needed, creates a `phoenix` service user, and installs three services that start on boot.
+Requires Ubuntu 22.04+/Debian 12+ or RHEL/Rocky/Alma 9+/Amazon Linux 2023. `setup.sh` installs Python 3.11+ if
+needed, creates a `phoenix` service user, and installs services that start on boot:
+
+| Service                 | What it is                         | Settings file                        |
+|-------------------------|------------------------------------|--------------------------------------|
+| `phoenix`               | Phoenix UI + collector (:6006)     | `/etc/default/phoenix`               |
+| `phoenix-demo-app`      | Demo app (:8000)                   | `/etc/default/phoenix-demo-app`      |
+| `phoenix-demo-loadgen`  | Steady background traffic          | `/etc/default/phoenix-demo-loadgen`  |
+
+Script options: `APP=0` installs Phoenix only, `LOADGEN=0` skips the load generator, `ANTHROPIC_API_KEY=...` saves a
+Claude key. Re-running the script upgrades and redeploys, and keeps trace data and existing `/etc/default/*` files.
+
+Pick **B1** (everything on one VM, simplest) or **B2** (Phoenix and the app on separate VMs).
+
+### B1. Everything on one VM
+
+On the VM, get the code. If the repository is private, use a GitHub personal access token as the password.
 
 ```bash
-sudo bash setup.sh
+git clone https://github.com/yahrghrr/arize-demo.git ~/arize-demo
 ```
 
-With real Claude calls (the key is saved to `/etc/default/phoenix-demo-app`, readable only by root and the service user):
+Install Phoenix, the app and the load generator. Without a key the app runs in mock mode:
 
 ```bash
-sudo ANTHROPIC_API_KEY=sk-ant-... bash setup.sh
+cd ~/arize-demo && sudo bash setup.sh
 ```
 
-Other options: `APP=0` installs Phoenix only, `LOADGEN=0` skips the load generator. Re-running the script upgrades and
-redeploys while keeping the existing `/etc/default/*` files.
+Or with real Claude calls:
 
-| Service                 | Settings file                        |
-|-------------------------|--------------------------------------|
-| `phoenix`               | `/etc/default/phoenix`               |
-| `phoenix-demo-app`      | `/etc/default/phoenix-demo-app`      |
-| `phoenix-demo-loadgen`  | `/etc/default/phoenix-demo-loadgen`  |
+```bash
+cd ~/arize-demo && sudo ANTHROPIC_API_KEY=sk-ant-... bash setup.sh
+```
 
-After editing a settings file, restart that service, for example:
+Check that all three services are running (expect `active` three times, then the app's mode):
+
+```bash
+systemctl is-active phoenix phoenix-demo-app phoenix-demo-loadgen && curl -s http://localhost:8000/health
+```
+
+Open inbound TCP **6006** and **8000** in the VM's firewall or cloud security group (on Azure: VM → Networking → Add
+inbound port rule), with your own IP as the source. Phoenix has no login by default, so don't allow "Any". Then open:
+
+- Demo app: `http://<vm-ip>:8000`
+- Phoenix: `http://<vm-ip>:6006`, project **phoenix-demo**
+
+Without opening ports, you can tunnel instead and use `http://localhost:6006`:
+
+```bash
+ssh -N -L 6006:localhost:6006 -L 8000:localhost:8000 <user>@<vm-ip>
+```
+
+### B2. Phoenix and the app on separate VMs
+
+Set up the Phoenix VM first. On the **Phoenix VM**, install Phoenix only:
+
+```bash
+git clone https://github.com/yahrghrr/arize-demo.git ~/arize-demo
+```
+
+```bash
+cd ~/arize-demo && sudo APP=0 bash setup.sh
+```
+
+Note its private IP. If both VMs are in the same virtual network, the app should use this address, so port 6006
+doesn't need to be open to the internet:
+
+```bash
+hostname -I | awk '{print $1}'
+```
+
+On the **app VM**, install everything (add `ANTHROPIC_API_KEY=...` after `sudo` for real Claude calls):
+
+```bash
+git clone https://github.com/yahrghrr/arize-demo.git ~/arize-demo
+```
+
+```bash
+cd ~/arize-demo && sudo bash setup.sh
+```
+
+Point the app at the Phoenix VM (replace `PHOENIX_IP`):
+
+```bash
+sudo sed -i 's|^PHOENIX_COLLECTOR_ENDPOINT=.*|PHOENIX_COLLECTOR_ENDPOINT=http://PHOENIX_IP:6006|' /etc/default/phoenix-demo-app
+```
+
+`setup.sh` always installs a local Phoenix as well. Turn it off on the app VM (`mask` keeps it off after reboots),
+then restart the app:
+
+```bash
+sudo systemctl disable --now phoenix && sudo systemctl mask phoenix
+```
+
+```bash
+sudo systemctl restart phoenix-demo-app phoenix-demo-loadgen
+```
+
+Check that the app VM can reach Phoenix (expect `HTTP 200`):
+
+```bash
+curl -s -o /dev/null -w "HTTP %{http_code}\n" http://PHOENIX_IP:6006/healthz
+```
+
+Firewall rules:
+
+| VM      | Inbound port              | Source                                               |
+|---------|---------------------------|------------------------------------------------------|
+| Phoenix | 6006 (4317 for gRPC)      | The app VM, plus your own IP to view the UI          |
+| App     | 8000                      | Your own IP                                          |
+
+### Adding a Claude API key later
+
+Edit the app's settings file and replace the line `# ANTHROPIC_API_KEY=sk-ant-...` with
+`ANTHROPIC_API_KEY=<your key>` (no leading `#`):
+
+```bash
+sudo nano /etc/default/phoenix-demo-app
+```
 
 ```bash
 sudo systemctl restart phoenix-demo-app
 ```
 
-Follow the logs:
+With `LLM_MODE=auto`, `curl -s localhost:8000/health` now reports `"mode":"claude"`. Re-running
+`sudo ANTHROPIC_API_KEY=... bash setup.sh` does the same.
+
+Every load generator request is now a billed API call, and agent requests make two or more. Lower `RPM` in
+`/etc/default/phoenix-demo-loadgen` and restart it, or stop it:
+
+```bash
+sudo systemctl disable --now phoenix-demo-loadgen
+```
+
+### Turning on login
+
+Phoenix runs without login by default. To require one, generate a secret of 32+ characters:
+
+```bash
+openssl rand -hex 32
+```
+
+Then, in `/etc/default/phoenix`, uncomment `PHOENIX_ENABLE_AUTH=True` and set `PHOENIX_SECRET` to that value:
+
+```bash
+sudo nano /etc/default/phoenix
+```
+
+```bash
+sudo systemctl restart phoenix
+```
+
+Log in with the default admin, **`admin@localhost`** / **`admin`**. Phoenix asks for a new password on first login.
+
+**With login on, Phoenix rejects traces that carry no API key** (the app logs `401 Unauthorized`). In Phoenix, go to
+**Settings → API Keys**, create a **System** key, and set `PHOENIX_API_KEY=<key>` in `/etc/default/phoenix-demo-app`
+on the VM running the app:
+
+```bash
+sudo nano /etc/default/phoenix-demo-app
+```
+
+```bash
+sudo systemctl restart phoenix-demo-app
+```
+
+Only traces sent after the key is in place appear. Earlier ones were rejected.
+
+### Logs and settings
+
+After editing a settings file, restart that service. Follow the logs with:
 
 ```bash
 journalctl -u phoenix -u phoenix-demo-app -u phoenix-demo-loadgen -f
 ```
 
-Open ports 6006 and 8000 in the VM's firewall or security group to reach the UIs from your browser. Phoenix runs
-without login by default. Before exposing it beyond a private network, set `PHOENIX_ENABLE_AUTH=True` and
-`PHOENIX_SECRET` in `/etc/default/phoenix`, create an API key in Phoenix (Settings → API Keys) and put it in
-`PHOENIX_API_KEY` in `/etc/default/phoenix-demo-app`.
+### Troubleshooting
 
-To remove everything (`PURGE=1` also deletes trace data and config):
+| Symptom | Cause and fix |
+|---|---|
+| Chat page stuck on "Loading…" and Send only reloads the page | Fixed in this version (the page used a browser API that only works over HTTPS). Pull, then re-run `sudo bash setup.sh`, or copy `app/demo_app/static/index.html` to `/opt/phoenix/app/demo_app/static/`. Then hard-refresh. |
+| Chats get answers but nothing appears in Phoenix | Look for export errors: `sudo journalctl -u phoenix-demo-app -n 80 --no-pager \| grep -iE 'export\|error'` |
+| …log shows `401 Unauthorized` | Phoenix login is on and the app has no key. See [Turning on login](#turning-on-login). |
+| …log shows connection refused or timeouts | Check `PHOENIX_COLLECTOR_ENDPOINT` in `/etc/default/phoenix-demo-app`. On one VM it must be `http://localhost:6006`. A VM's own public IP usually goes through the cloud firewall and gets blocked. With two VMs, use the Phoenix VM's private IP and allow the app VM on port 6006. |
+| "Claude API error 529: Overloaded (mock)" in the chat | On purpose: mock mode fails about 2% of calls so Phoenix has errors to show. Set `MOCK_FAILURE_RATE=0` to turn it off. |
+| No traffic unless you chat | `systemctl is-active phoenix-demo-loadgen`. It isn't installed with `LOADGEN=0` or `APP=0`. |
+
+### Uninstall
+
+`PURGE=1` also deletes trace data and config:
 
 ```bash
 sudo bash uninstall.sh

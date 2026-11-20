@@ -133,3 +133,12 @@ if [[ "$APP" == "1" ]]; then
   echo "  Mode:              $(curl -fs --retry 10 --retry-connrefused --retry-delay 1 http://localhost:8000/health || echo 'not up yet: journalctl -u phoenix-demo-app')"
 fi
 echo "Logs: journalctl -u phoenix -u phoenix-demo-app -u phoenix-demo-loadgen -f"
+
+# With login on, Phoenix answers 401 to traces without an API key, and the app only logs it.
+if [[ "$APP" == "1" ]] && grep -qiE '^[[:space:]]*PHOENIX_ENABLE_AUTH=["'\'']?true' /etc/default/phoenix \
+   && ! grep -qE '^[[:space:]]*PHOENIX_API_KEY=[^[:space:]#]+' /etc/default/phoenix-demo-app; then
+  echo
+  echo "WARNING: Phoenix login is on but /etc/default/phoenix-demo-app has no PHOENIX_API_KEY,"
+  echo "         so traces are rejected (401). Create a System key in Phoenix (Settings > API Keys),"
+  echo "         set PHOENIX_API_KEY in that file, then: sudo systemctl restart phoenix-demo-app"
+fi

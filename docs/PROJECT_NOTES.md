@@ -15,7 +15,8 @@ The earlier copy is still on that repository's `claude/awesome-fermi-aiku6n` bra
 | Demo app, mock mode                     | Every endpoint exercised; chat, RAG, agent, error and feedback traces appeared as expected        |
 | Demo app, real Claude                   | Partly: a dummy key reached the API and got a 401, which Phoenix recorded. No successful answer seen yet |
 | Docker Compose                          | Not run (no Docker daemon available). The pinned image tag `arizephoenix/phoenix:version-22.0.0` was confirmed to exist |
-| `setup.sh` / `uninstall.sh` (systemd)   | Syntax-checked only (no systemd available)                                                         |
+| `setup.sh` (systemd, one VM)            | Deployed on an Azure Ubuntu VM: Phoenix, app and chat page working, traces visible after the fixes below |
+| `uninstall.sh`                          | Syntax-checked only                                                                                |
 
 ## Design decisions
 
@@ -32,8 +33,17 @@ The earlier copy is still on that repository's `claude/awesome-fermi-aiku6n` bra
 - **No authentication by default.** Phoenix ships without login; the README explains how to enable it before exposing
   the server beyond a private network.
 
+## Issues found on the first VM deploy
+
+- **Chat page stuck on "Loading…".** `crypto.randomUUID()` only exists on HTTPS or localhost, so over
+  `http://<vm-ip>` the page script failed before attaching any handlers. Fixed with a `crypto.getRandomValues()`
+  fallback; reproduced and verified in a browser over plain HTTP on a non-localhost address.
+- **No traces in Phoenix (401).** After login was turned on, the app had no `PHOENIX_API_KEY`, so every export was
+  rejected and only logged. The README now covers this, and `setup.sh` warns when login is on without a key.
+
 ## Open items
 
 - Run once with a real `ANTHROPIC_API_KEY` and confirm a successful Claude response is traced.
-- Run `docker compose up -d --build` and the VM install on a host with Docker and systemd.
+- Run `docker compose up -d --build` on a host with Docker.
+- Try the two-VM layout (README, B2) end to end.
 - Keep the load generator's `RPM` low in Claude mode: every request is billed, and agent requests make two or more calls.
