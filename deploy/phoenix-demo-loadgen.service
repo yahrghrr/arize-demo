@@ -1,0 +1,18 @@
+[Unit]
+Description=Phoenix demo load generator
+Wants=phoenix-demo-app.service
+After=phoenix-demo-app.service
+
+[Service]
+Type=simple
+User=phoenix
+Group=phoenix
+EnvironmentFile=-/etc/default/phoenix-demo-loadgen
+ExecStart=/opt/phoenix/app-venv/bin/python /opt/phoenix/app/loadgen.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

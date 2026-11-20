@@ -1,0 +1,19 @@
+[Unit]
+Description=Phoenix demo app (Claude support assistant traced into Phoenix)
+Wants=network-online.target phoenix.service
+After=network-online.target phoenix.service
+
+[Service]
+Type=simple
+User=phoenix
+Group=phoenix
+WorkingDirectory=/opt/phoenix/app
+EnvironmentFile=-/etc/default/phoenix-demo-app
+ExecStart=/bin/sh -c 'exec /opt/phoenix/app-venv/bin/uvicorn demo_app.main:app --host 0.0.0.0 --port "${APP_PORT:-8000}"'
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

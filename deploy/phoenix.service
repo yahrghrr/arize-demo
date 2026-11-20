@@ -1,0 +1,21 @@
+[Unit]
+Description=Arize Phoenix (LLM tracing and evaluation server)
+Documentation=https://arize.com/docs/phoenix
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=phoenix
+Group=phoenix
+WorkingDirectory=/var/lib/phoenix
+# PHOENIX_* settings (ports, storage, auth) live in this file; "-" = optional
+EnvironmentFile=-/etc/default/phoenix
+ExecStart=/opt/phoenix/server-venv/bin/phoenix serve
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

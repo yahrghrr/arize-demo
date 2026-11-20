@@ -1,0 +1,46 @@
+# Phoenix server + demo app + load generator.
+#   docker compose up -d --build
+#   Phoenix UI:  http://localhost:6006
+#   Demo app:    http://localhost:8000
+# Set ANTHROPIC_API_KEY in your shell (or a .env file next to this one) to use real Claude
+# calls; without it the app runs in mock mode and still produces realistic traces.
+services:
+  phoenix:
+    image: arizephoenix/phoenix:version-22.0.0
+    ports:
+      - "6006:6006"   # UI + OTLP/HTTP (/v1/traces)
+      - "4317:4317"   # OTLP/gRPC
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    volumes:
+      - phoenix-data:/mnt/data
+    restart: unless-stopped
+
+  app:
+    build: ./app
+    ports:
+      - "8000:8000"
+    environment:
+      PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006
+      PHOENIX_PROJECT_NAME: phoenix-demo
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MODE: ${LLM_MODE:-auto}
+      DEMO_CLAUDE_MODEL: ${DEMO_CLAUDE_MODEL:-claude-opus-5-5}
+      DEMO_CLAUDE_EFFORT: ${DEMO_CLAUDE_EFFORT:-low}
+    depends_on:
+      - phoenix
+    restart: unless-stopped
+
+  loadgen:
+    build: ./app
+    command: ["python", "loadgen.py"]
+    environment:
+      APP_URL: http://app:8000
+      RPM: ${RPM:-6}
+    depends_on:
+      - app
+    restart: unless-stopped
+    profiles: ["loadgen"]   # opt in: docker compose --profile loadgen up -d
+
+volumes:
+  phoenix-data:
