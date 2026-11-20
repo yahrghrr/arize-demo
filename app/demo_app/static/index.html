@@ -59,7 +59,9 @@ const HINTS = {
   error: ["Calls a model that doesn't exist, so the trace in Phoenix shows a failed LLM span.", ["Send anything"]],
 };
 let mode = "chat";
-const session = crypto.randomUUID();
+// crypto.randomUUID() only exists on HTTPS or localhost; the page is usually served over plain http://<vm-ip>.
+const session = crypto.randomUUID ? crypto.randomUUID()
+  : Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
 const $ = (id) => document.getElementById(id);
 
 fetch("/health").then(r => r.json()).then(h => {
