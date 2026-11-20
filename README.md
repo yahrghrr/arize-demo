@@ -40,6 +40,7 @@ agent requests make two or more, so keep the load generator's `RPM` low.
 
 ```
 .
+├── docs/PROJECT_NOTES.md        # build history, test status, decisions
 ├── docker-compose.yml           # Phoenix + app (+ loadgen profile) in containers
 ├── setup.sh / uninstall.sh      # VM install as systemd services
 ├── server/requirements.txt      # pinned arize-phoenix for the VM install
