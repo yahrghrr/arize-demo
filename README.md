@@ -2,6 +2,9 @@
 
 > Intended for demos and testing, not for production use.
 
+> **New to AI observability?** Read the [Phoenix tutorial for Dynatrace users](docs/TUTORIAL.md): what every part of
+> Phoenix does, what LangChain/Agno/etc. are, and how to instrument your own applications.
+
 A self-hosted **[Arize Phoenix](https://arize.com/docs/phoenix)** server (LLM tracing and evaluation) plus a small
 **Claude-powered support assistant** that sends OpenTelemetry traces to it. You get chat, RAG, an agent with tool calls,
 deliberate failures and user feedback to look at in Phoenix.
@@ -40,6 +43,7 @@ agent requests make two or more, so keep the load generator's `RPM` low.
 
 ```
 .
+├── docs/TUTORIAL.md             # Phoenix explained for Dynatrace users, with screenshots
 ├── docs/PROJECT_NOTES.md        # build history, test status, decisions
 ├── docker-compose.yml           # Phoenix + app (+ loadgen profile) in containers
 ├── setup.sh / uninstall.sh      # VM install as systemd services
